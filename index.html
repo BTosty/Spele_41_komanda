@@ -15,13 +15,22 @@
                     <option value="triangle">Trīsstūris</option>
                 </select>
                 <label for="numP">Savienojamo Punktu skaits:</label>
-                    <input name="numP" type="range" min="15" max="25" value="15" class="slider" id="select-points">
+                    <input name="numP" type="range" min="5" max="25" value="5" class="slider" id="select-points">
                 </select>
             </div>
             <div>
-                <label for="algorithm">Algoritms:</label>
-                <select name="algorithm" id="select-algorithm">
+                <label for="player-1">Speletajs 1:</label>
+                <select name="player-1" id="player-1-select">
+                    <option value="human" selected>Cilveks</option>
                     <option value="minmax">Minmaks</option>
+                    <option value="alpha-beta">Alfa-beta</option>
+                </select>
+            </div>
+            <div>
+                <label for="player-2">Speletajs 2:</label>
+                <select name="player-2" id="player-2-select">
+                    <option value="human">Cilveks</option>
+                    <option value="minmax" selected>Minmaks</option>
                     <option value="alpha-beta">Alfa-beta</option>
                 </select>
             </div>
@@ -30,15 +39,14 @@
                 <input type="number" id="maxDepthInput" min="1" value="2" max="10"/>
             </div>
             <div>
-                <label for="startingPlayer">Spēli sāk:</label>
-                <select name="startingPlayer" id="select-startingPlayer">
-                    <option value="human">cilvēks</option>
-                    <option value="pc">dators</option>
-                </select>
+                <label for="searchDepthDynamic">Dinamisks dziļums?</label>
+                <input type="checkbox" id="searchDepthDynamic"/>
+            </div>
+            <div id="score-display" style="white-space: pre-line;"></div>
+            <div>
+                <p style="margin-top: 10px;">Pašreizējais spēlētājs: <span id="current_player"></span></p>
             </div>
             <div>
-                <p>1. Soda punkti: <span id="player_points">0</span></p>
-                <p>2. Soda punkti: <span id="pc_points">0</span></p>
                 <p style="margin-top: 10px;">Pāries pāri: <span id="about_to_intersect">0</span></p>
             </div>
             
