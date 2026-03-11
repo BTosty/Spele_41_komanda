@@ -4,10 +4,9 @@ const ctx = canvas.getContext("2d");
 const shapeDropdown = document.getElementById("select-contour");
 const pointVal = document.getElementById("select-points");
 const algorithmDropdown = document.getElementById("select-algorithm");
-const startPlayerDropdown = document.getElementById("select-startingPlayer");
 
-const uiPlayerPoints = document.getElementById("player_points");
-const uiPcPoints = document.getElementById("pc_points");
+const uiPlayerPoints = document.getElementById("current_player");
+const uiCurrentPlayer = document.getElementById("score-display");
 const uiIntersectPreview = document.getElementById("about_to_intersect");
 
 const serchDepthInput = document.getElementById("maxDepthInput")
@@ -42,13 +41,8 @@ const centerY = canvasH/2
 
 let selectedShape = shapeDropdown.value // Nomaina ar UI
 let selectedAlg = algorithmDropdown.value // Nomaina ar UI
-let selectedStartPlayer = startPlayerDropdown.value // Nomaina ar UI
 let maximumDepth = serchDepthInput.value // Nomaina ar UI
 
-
-let isPlayerTurn = false;
-let playerPoints = 0;
-let pcPoints = 0;
 
 let lines = [] // Līnijas, [sākuma punkts, beigu punkts, id], punkti doti pēc indeksa
 let filledPoints = [] // masīvs, satur visus punktus un viņu id, pēc id nosaka vai pašreizējā spēlētāja vai nē 
@@ -56,6 +50,13 @@ let drawPoints = [] // masīvs, satur visus punktus un viņu pozīcijas
 let highlightedPoint = undefined
 let fromDrawPoint = undefined
 let mousePos = {x: 0, y:0}
+
+
+let currentPlayer = 0
+let playerCount = 2
+let players = ["human", "human"]
+let playerScore = []
+let playerLines = []
 
 
 document.addEventListener("mousemove", (e)=>{
@@ -132,11 +133,6 @@ algorithmDropdown.addEventListener("input", (e) => {
     console.log(selectedAlg)
     initGame()
 })
-startPlayerDropdown.addEventListener("input", (e) => {
-    selectedStartPlayer = e.target.value
-    console.log(selectedStartPlayer)
-    initGame()
-})
 serchDepthInput.addEventListener("input", (e) => {
     let val = Number(e.target.value);
     if (val > 25) {
@@ -165,8 +161,13 @@ function line2id(line){
 }
 
 function updScore(){
-    uiPlayerPoints.textContent = playerPoints
-    uiPcPoints.textContent = pcPoints
+    let msg = ""
+    for (let i = 0; i < playerCount; i++) {
+        msg += `${players[i]}: ${playerScore[i]}\n`
+        
+    }
+    uiPlayerPoints.textContent = msg
+    uiCurrentPlayer.textContent = `Pašreiz iet: ${currentPlayer+1}. ${players[currentPlayer]}`
 }
 
 function updIntersectCount(count){
@@ -174,8 +175,7 @@ function updIntersectCount(count){
 }
 
 function addFunctionalLine(from, to){
-    if(isPlayerTurn) p1Lines.add(idCounter)
-    else p2Lines.add(idCounter)
+    playerLines[currentPlayer].add(idCounter)
     lines.push([from, to, idCounter])
     filledPoints[from] = idCounter
     filledPoints[to] = idCounter
@@ -211,161 +211,11 @@ function getGamestate(){
     console.log("Found gamestate: ", state)
     return state
 }
-function slow_createGameTree2(gamestate){
-    let total_lines = Math.floor((pointCount*(pointCount-1))/2);
-    const full_mask = (1n << BigInt(total_lines)) - 1n;
-    const table = new Array(total_lines).fill(0n);
-    
-    const pow2 = [];
-    for (let i = 0; i < total_lines; i++) {
-        pow2[i] = 1n << BigInt(i);
-    }
 
-    function buildColMask(){
-        for (let s1 = 0; s1 < pointCount; s1++) {
-            for (let e1 = s1+1; e1 < pointCount; e1++) {
-                const l1 = point2id(s1,e1)
-                for (let s2 = 0; s2 < pointCount; s2++) {
-                    for (let e2 = s2+1; e2 < pointCount; e2++) {
-                        if(s1 === s2 || s1 === e2 || e1 === s2 || e1 === e2) continue
-                        const l2 = point2id(s2,e2)
+function calculateMiniMax(gamestate){
 
-                        const collision = isInside(s2, s1, e1) ^ isInside(e2, s1, e1)
-                        if(collision){
-                            table[l1] |= pow2[l2]
-                            table[l2] |= pow2[l1]
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    buildColMask()
-
-
-
-
-
-    const memory = new Map()
-
-    function hashBigInt(mask) {
-        const mask32 = (1n << 32n) - 1n;
-        const mult = 0x5bd1e995n;
-        let hash = 0x9747b28cn;
-        let tmp = mask;
-        while (tmp > 0n) {
-            const chunk = tmp & mask32;
-            hash ^= chunk;
-            hash = (hash * mult) & 0xFFFFFFFFn;
-            tmp >>= 32n;
-        }
-        return Number(hash & 0xFFFFFFFFFFFFn);
-    }
-
-    function getCacheKey(mask, last_move_id, max_player) {
-        return hashBigInt((mask<<10n) | (max_player?(1n<<9n):0n) | BigInt(last_move_id))
-    }
-
-    // function getCacheKey(mask, last_move_id, max_player) {
-    //     return (mask<<10n) | (max_player?(1n<<9n):0n) | BigInt(last_move_id)
-    // }
-
-    let total_calls = 0
-    let total_colls = 0
-    const maybe_faster = { move: -1, score: -1 }
-
-    function minimax(mask, last_move_id, acc_score, depth, max_player){
-        total_calls++
-        let cKey = -1
-        let best_score = max_player?-Infinity:Infinity
-        let best_move = undefined
-        
-        
-        let collision_score = 0
-        let last_move_mask = mask
-        if(last_move_id >= 0){
-            last_move_mask |= pow2[last_move_id]
-            collision_score = ((table[last_move_id] & mask) !== 0n) ? -1*(depth+1) : 0
-        }
-
-        if(depth>1){
-            cKey = getCacheKey(mask | last_move_mask, acc_score + collision_score, max_player)
-            if(memory.has(cKey)){
-                [best_move, best_score] = memory.get(cKey)
-                maybe_faster.move = best_move
-                maybe_faster.score = best_score
-                total_colls++
-                return
-            }
-        }
-
-        const nMask = mask | last_move_mask
-        // console.log(last_move_id, last_move_mask, mask, full_mask, nMask)
-        if(depth === 0 || nMask === full_mask) {
-            maybe_faster.score = acc_score + collision_score
-            maybe_faster.move = last_move_id
-            return
-        } 
-
-        
-
-        let empty = (~mask) & full_mask
-        let move = 0
-
-        while (empty) {
-            if (empty & 1n){
-                minimax(nMask, move, acc_score + collision_score, depth-1, !max_player)
-                const score = maybe_faster.score
-                if(max_player){
-                    if(score > best_score){
-                        best_score = score
-                        best_move = maybe_faster.move
-                    }
-                }
-                else {
-                    if(score < best_score){
-                        best_score = score
-                        best_move = maybe_faster.move
-                    }
-                }
-            }
-            empty >>= 1n
-            move++
-        }
-        maybe_faster.move = best_move
-        maybe_faster.score = best_score
-        if(depth>1){
-            memory.set(cKey, [best_move, best_score])
-        }
-        return
-    }
-    const start = Date.now()
-    minimax(gamestate, -1, 0, maximumDepth, true)
-    const end = Date.now()
-    console.log(`Time taken: ${end - start} ms`)
-    console.log("Total calls: ", total_calls)
-    console.log("Total collisions: ", total_colls)
-    console.log("Choosing ", maybe_faster.move, " with expected value ", maybe_faster.score)
-    console.log("Immediate: ", (table[maybe_faster.move] & gamestate) !== 0n ? "collision" : "safe")
-    return maybe_faster.move
 }
 
-function calculateGameTree(){
-    switch(selectedAlg){
-        case "minmax": 
-            let move = slow_createGameTree2(getGamestate())
-            return id2point(move)
-
-        case "alpha-beta": 
-            createGameTree(rootNode, 0)
-            return alphabeta() // TODO
-    }
-}
-
-function alphabeta(){
-    //TODO
-}
 
 function isInside(point, start, end){
     if(start > end)
@@ -374,28 +224,9 @@ function isInside(point, start, end){
         return point > start && point < end
 }
 
-function countIntersections(from, to, usedLines){
-    let intersections = 0
-    
-    for (let i = 0; i < usedLines.length; i++) {
-        const line = usedLines[i]
-        if(
-            (from != line_from && from != line_to && to != line_from && to != line_to) && (
-            (isInside(line_from, from, to) && !isInside(line_to, from, to)) ||
-            (isInside(line_to, from, to) && !isInside(line_from, from, to)))
-        ){
-            intersections++
-        }
-    }
-    return intersections
-}
 
-
-let p1Lines = new Set([0])
-let p2Lines = new Set([0])
 function friendlyLine(id){
-    if(isPlayerTurn) return p1Lines.has(id)
-    else return p2Lines.has(id)
+    return playerLines[currentPlayer].has(id)
 }
 
 function calculateIntersections(from, to){
@@ -414,8 +245,6 @@ function calculateIntersections(from, to){
 }
 
 function initGame(){
-    p1Lines = new Set([0])
-    p2Lines = new Set([0])
     lines = []
     filledPoints = []
     drawPoints = []
@@ -426,6 +255,13 @@ function initGame(){
 
     for (let i = 0; i < pointCount; i++) {
         filledPoints.push(0) // Todo
+    }
+    
+    playerLines = []
+    playerScore = []
+    for (let i = 0; i < playerCount; i++) {
+        playerLines.push(new Set())
+        playerScore.push(0)
     }
 
     const arena_x_2 = arena_x / 2
@@ -488,7 +324,6 @@ function initGame(){
     }
 
     updScore()
-    isPlayerTurn = selectedStartPlayer
 }
 
 function drawPoint(pos_x, pos_y, color){
@@ -575,27 +410,20 @@ function hasValidMoves(){
 }
 
 function showResults(){
-    console.log(`P1 points: ${playerPoints}; P2 points: ${pcPoints}`)
-    const winnerMessage = document.getElementById("winner-message");
-    const endGameScreen = document.getElementById("game-over");
-    endGameScreen.style.display = "block";
-    winnerMessage.textContent = ""
-    game.style.display = "none";
-    if(playerPoints < pcPoints){
-        winnerMessage.textContent = "Tu uzvarēji!"
-    }
-    else if(playerPoints > pcPoints){
-        winnerMessage.textContent = "Dators uzvarēja!"
-    }
-    else{
-        winnerMessage.textContent = "Neizšķirts!"
-    }
-    winnerMessage.style.display = "block";
+    // TODO
 }
 
 function chooseNextTurn(){
-    let chosenPoints = calculateGameTree()
-    console.log(`Choosing ${chosenPoints[0]} ${chosenPoints[1]}`)
+    let move = undefined
+    switch(selectedAlg){
+        case "minmax": 
+            move = calculateMiniMax(getGamestate())
+            break
+        case "alpha-beta": 
+            move = calculateAlphaBeta(getGamestate())
+    }
+    let chosenPoints = id2point(move2)
+    console.log(`${selectedAlg}: Choosing ${chosenPoints[0]} ${chosenPoints[1]}`)
     makeAMove(chosenPoints[0], chosenPoints[1])
 
 }
@@ -611,9 +439,7 @@ function makeAMove(from, to){
     }
     let intersects = calculateIntersections(from, to).length
     addFunctionalLine(from, to)
-    if(isPlayerTurn) playerPoints += intersects?1:0
-    else pcPoints += intersects?1:0
-
+    playerScore[currentPlayer] += intersects?1:0
     onNextTurn()
 }
 
@@ -624,19 +450,11 @@ function onNextTurn(){
         showResults()
         return
     }
-    isPlayerTurn = !isPlayerTurn
-    if(!isPlayerTurn){
-        chooseNextTurn()
-    }
-    // TODO main user loop
+    currentPlayer++
+    if(currentPlayer == playerCount) currentPlayer == 0
+    if(players[currentPlayer] != "human") chooseNextTurn()
+
 }
 
-// Karoce!!!!!!!!!!!!!!!
-// Good luck, have fun
-// Kurs grib taisit UI, kurs algoritmus? (+ kurs JS loopu prieks liniju vilksanas + whatever)
-
-
-
-
-drawLoop() // Init draw
-initGame() // TODO: sakuma izveles ekrans
+drawLoop()
+initGame()
