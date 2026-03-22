@@ -1,0 +1,15 @@
+{
+  "name": "miskaste-ai-1",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "dev": "serve"
+  },
+  "dependencies": {
+    "serve": "^14.2.5"
+  }
+}
